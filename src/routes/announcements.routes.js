@@ -20,4 +20,4 @@ router.post('/', authenticate, createAnnouncementValidator, createAnnouncement);
 router.patch('/:id', authenticate, updateAnnouncementValidator, updateAnnouncement);
 router.delete('/:id', authenticate, deleteAnnouncement);
 
-export default router;4
+export default router;
