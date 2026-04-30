@@ -10,6 +10,20 @@ import prisma from '../../prisma/client.js';
  *     responses:
  *       200:
  *         description: List of announcements
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   title: { type: string }
+ *                   description: { type: string }
+ *                   price: { type: number }
+ *                   userId: { type: integer }
+ *                   createdAt: { type: string, format: date-time }
+ *                   updatedAt: { type: string, format: date-time }
  */
 export const getAnnouncements = async (req, res, next) => {
   try {
@@ -77,13 +91,27 @@ export const getAnnouncementById = async (req, res, next) => {
  *             properties:
  *               title:
  *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 100
  *               description:
  *                 type: string
+ *                 minLength: 10
  *               price:
  *                 type: number
+ *                 minimum: 0
  *     responses:
  *       201:
- *         description: Created
+ *         description: Created — includes userId field
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: integer }
+ *                 title: { type: string }
+ *                 description: { type: string }
+ *                 price: { type: number }
+ *                 userId: { type: integer }
  *       401:
  *         description: Unauthorized
  */
@@ -91,20 +119,19 @@ export const createAnnouncement = async (req, res, next) => {
   try {
     const { title, description, price } = req.body;
 
-    // userId береться з req.user (встановлюється middleware)
     const announcement = await prisma.announcement.create({
       data: {
         title,
         description,
         price: Number(price),
-        userId: req.user.id,
+        userId: req.user.id,  // встановлюється authenticate middleware
       },
       include: {
         user: { select: { id: true, username: true, name: true } },
       },
     });
 
-    // Відповідь включає userId
+    // Відповідь містить userId як скалярне поле + user як relation
     return res.status(201).json(announcement);
   } catch (error) {
     next(error);
@@ -125,6 +152,15 @@ export const createAnnouncement = async (req, res, next) => {
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               price: { type: number }
  *     responses:
  *       200:
  *         description: Updated
@@ -142,14 +178,22 @@ export const updateAnnouncement = async (req, res, next) => {
     const announcement = await prisma.announcement.findUnique({ where: { id } });
     if (!announcement) throw createHttpError(404, 'Announcement not found');
 
-    // Перевірка ownership
+    // Ownership check
     if (announcement.userId !== req.user.id) {
       throw createHttpError(403, 'Access denied');
     }
 
+    // ✅ ВАЖЛИВО: деструктуруємо тільки дозволені поля — НЕ req.body напряму,
+    // щоб не допустити зміни userId або інших службових полів
+    const { title, description, price } = req.body;
+    const data = {};
+    if (title !== undefined) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (price !== undefined) data.price = Number(price);
+
     const updated = await prisma.announcement.update({
       where: { id },
-      data: req.body,
+      data,
       include: {
         user: { select: { id: true, username: true, name: true } },
       },
@@ -192,7 +236,7 @@ export const deleteAnnouncement = async (req, res, next) => {
     const announcement = await prisma.announcement.findUnique({ where: { id } });
     if (!announcement) throw createHttpError(404, 'Announcement not found');
 
-    // Перевірка ownership
+    // Ownership check
     if (announcement.userId !== req.user.id) {
       throw createHttpError(403, 'Access denied');
     }
